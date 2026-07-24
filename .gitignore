@@ -1,0 +1,44 @@
+# Build outputs
+bin/
+obj/
+
+# IDE/Editor
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# User secrets
+*.user
+*.suo
+
+# Build logs
+*.log
+*.log.*
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Rider
+.idea/
+
+# Publish output
+publish/
+
+# Global.json (keep global.json in repo, but not local overrides)
+# global.json
+
+# Rider specific
+.idea/
+*.sln.iml

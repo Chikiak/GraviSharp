@@ -1,0 +1,10 @@
+<linker>
+  <!-- Preservar Raylib-cs y sus P/Invokes para evitar trimming en NativeAOT -->
+  <assembly fullname="Raylib-cs">
+    <type fullname="*" preserve="all" />
+  </assembly>
+  <!-- Preservar tipos y métodos en GraviSharp (incluyendo stubs Kernel_* para simulación SIMD / dinámicos) -->
+  <assembly fullname="GraviSharp">
+    <type fullname="*" preserve="all" />
+  </assembly>
+</linker>
