@@ -3,8 +3,11 @@
   <assembly fullname="Raylib-cs">
     <type fullname="*" preserve="all" />
   </assembly>
-  <!-- Preservar tipos y métodos en GraviSharp (incluyendo stubs Kernel_* para simulación SIMD / dinámicos) -->
-  <assembly fullname="GraviSharp">
+  <!-- Preservar tipos y métodos en GraviSharp.UI y GraviSharp.Core -->
+  <assembly fullname="GraviSharp.UI">
+    <type fullname="*" preserve="all" />
+  </assembly>
+  <assembly fullname="GraviSharp.Core">
     <type fullname="*" preserve="all" />
   </assembly>
 </linker>

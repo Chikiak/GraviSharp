@@ -1,21 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net11.0</TargetFramework>
-    <LangVersion>preview</LangVersion>
-    <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>GraviSharp.UI</RootNamespace>
     <PublishAot>false</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Raylib-cs" Version="8.0.0" />
     <TrimmerRootDescriptor Include="TrimmerRoots.xml" />
   </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\GraviSharp.Core\GraviSharp.Core.csproj" />
+  </ItemGroup>
 </Project>
