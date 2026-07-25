@@ -28,7 +28,7 @@ dotnet build -c Release
 
 # Publicar self-contained JIT (fallback funcional)
 dotnet publish -c Release -r win-x64 --self-contained
-.\bin\Release\net11.0\win-x64\publish\GraviSharp.exe
+.\src\GraviSharp.UI\bin\Release\net11.0\win-x64\publish\GraviSharp.UI.exe
 ```
 
 ## Estado
