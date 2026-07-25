@@ -4,12 +4,20 @@ namespace GraviSharp;
 
 internal static class Starfield
 {
-    public static float[] GeneratePositions(int count, int maxDim, int seed = 1337)
+    public static float[] GeneratePositions(int count, int maxDim, int? seed = null)
     {
-        var rng = new Random(seed);
         var positions = new float[count];
-        for (int i = 0; i < count; i++)
-            positions[i] = rng.NextSingle() * maxDim;
+        if (seed.HasValue)
+        {
+            var rng = new Random(seed.Value);
+            for (int i = 0; i < count; i++)
+                positions[i] = rng.NextSingle() * maxDim;
+        }
+        else
+        {
+            for (int i = 0; i < count; i++)
+                positions[i] = Random.Shared.NextSingle() * maxDim;
+        }
         return positions;
     }
 }
