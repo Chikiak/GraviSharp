@@ -1,8 +1,8 @@
 using System;
 
-namespace GraviSharp;
+namespace GraviSharp.Core;
 
-internal static class Starfield
+public static class Starfield
 {
     public static float[] GeneratePositions(int count, int maxDim, int? seed = null)
     {

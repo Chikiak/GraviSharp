@@ -1,4 +1,6 @@
 <Solution>
-  <Project Path="GraviSharp.csproj" />
-  <Project Path="GraviSharp.Tests/GraviSharp.Tests.csproj" />
+  <Project Path="src\GraviSharp.Core\GraviSharp.Core.csproj" />
+  <Project Path="src\GraviSharp.UI\GraviSharp.UI.csproj" />
+  <Project Path="tests\GraviSharp.Tests\GraviSharp.Tests.csproj" />
+  <Project Path="tests\GraviSharp.VisualTests\GraviSharp.VisualTests.csproj" />
 </Solution>

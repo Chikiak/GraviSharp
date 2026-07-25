@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using Xunit;
-using GraviSharp;
+using GraviSharp.Core;
 
 namespace GraviSharp.Tests;
 

@@ -1,6 +1,7 @@
 using Raylib_cs;
+using GraviSharp.Core;
 
-namespace GraviSharp;
+namespace GraviSharp.UI;
 
 internal static class Program
 {

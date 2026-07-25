@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>GraviSharp.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="GraviSharp.Tests" />
+    <InternalsVisibleTo Include="GraviSharp.VisualTests" />
+  </ItemGroup>
+</Project>
