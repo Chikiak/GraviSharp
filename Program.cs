@@ -14,6 +14,9 @@ internal static class Program
         Raylib.InitWindow(WindowWidth, WindowHeight, "GraviSharp");
         Raylib.SetTargetFPS(TargetFps);
 
+        float[] xs = Starfield.GeneratePositions(10_000, WindowWidth);
+        float[] ys = Starfield.GeneratePositions(10_000, WindowHeight);
+
         while (!Raylib.WindowShouldClose())
         {
             Raylib.BeginDrawing();
