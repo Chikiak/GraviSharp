@@ -18,4 +18,8 @@
     <TrimmerRootDescriptor Include="TrimmerRoots.xml" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="GraviSharp.Tests/**/*.cs" />
+  </ItemGroup>
+
 </Project>
