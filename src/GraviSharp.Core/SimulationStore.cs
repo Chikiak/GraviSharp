@@ -72,17 +72,108 @@ public static class SimulationStore
     }
 
     public static unsafe void UpdateLinear(NativeStore* store, int width, int height, float dt)
-        => throw new NotImplementedException();
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot update a null or disposed NativeStore.");
 
+        int count = store->Count;
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* vxPtr = store->Vx;
+        float* vyPtr = store->Vy;
+
+        for (int i = 0; i < count; i++)
+        {
+            float x = xPtr[i] + vxPtr[i] * dt;
+            float y = yPtr[i] + vyPtr[i] * dt;
+            float vx = vxPtr[i];
+            float vy = vyPtr[i];
+
+            // X bounds reflection
+            if (x < 0f)
+            {
+                x = -x;
+                vx = -vx;
+            }
+            else if (x >= width)
+            {
+                x = 2f * width - x;
+                vx = -vx;
+            }
+
+            // Y bounds reflection
+            if (y < 0f)
+            {
+                y = -y;
+                vy = -vy;
+            }
+            else if (y >= height)
+            {
+                y = 2f * height - y;
+                vy = -vy;
+            }
+
+            xPtr[i] = x;
+            yPtr[i] = y;
+            vxPtr[i] = vx;
+            vyPtr[i] = vy;
+        }
+    }
+
+    /// <summary>Exposes the X coordinates as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
+    /// <remarks>LIFETIME CONTRACT: The returned <see cref="ReadOnlySpan{T}"/> aliases the native
+    /// memory of <paramref name="store"/>. Callers MUST NOT retain it after
+    /// <see cref="SimulationStore.Dispose(NativeStore*)"/> runs; doing so reads freed memory.
+    /// After Dispose, returns <see cref="ReadOnlySpan{float}.Empty"/> safely.</remarks>
     public static unsafe ReadOnlySpan<float> ViewX(in NativeStore store)
-        => throw new NotImplementedException();
+    {
+        if (store.X is null) return ReadOnlySpan<float>.Empty;
+        return new ReadOnlySpan<float>(store.X, store.Count);
+    }
 
+    /// <summary>Exposes the Y coordinates as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
+    /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
     public static unsafe ReadOnlySpan<float> ViewY(in NativeStore store)
-        => throw new NotImplementedException();
+    {
+        if (store.Y is null) return ReadOnlySpan<float>.Empty;
+        return new ReadOnlySpan<float>(store.Y, store.Count);
+    }
 
+    /// <summary>Exposes the X velocities as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
+    /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
     public static unsafe ReadOnlySpan<float> ViewVx(in NativeStore store)
-        => throw new NotImplementedException();
+    {
+        if (store.Vx is null) return ReadOnlySpan<float>.Empty;
+        return new ReadOnlySpan<float>(store.Vx, store.Count);
+    }
 
+    /// <summary>Exposes the Y velocities as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
+    /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
     public static unsafe ReadOnlySpan<float> ViewVy(in NativeStore store)
-        => throw new NotImplementedException();
+    {
+        if (store.Vy is null) return ReadOnlySpan<float>.Empty;
+        return new ReadOnlySpan<float>(store.Vy, store.Count);
+    }
+
+    /// <summary>Safe-facade for <see cref="Allocate"/>. Allows callers without <c>unsafe</c>
+    /// context to obtain a <see cref="NativeStore"/>.</summary>
+    /// <remarks>TRANSITORY SCOPE: This wrapper exists exclusively to satisfy TC-PH1-002 criterion
+    /// (phase1.md:213 — consume ViewX from non-unsafe code). Fase 2 may delete it in favor of
+    /// direct unsafe callers once NativeStore allocation is moved out of non-unsafe test scaffolds.</remarks>
+    public static NativeStore AllocateSafe(in SimulationConfig config)
+        => Allocate(in config);
+
+    /// <summary>Safe-facade for <see cref="SeedLinear"/>. Takes the store by reference.</summary>
+    /// <remarks>TRANSITORY SCOPE: See <see cref="AllocateSafe"/> remarks. Fase 2 may delete.</remarks>
+    public static void SeedLinearSafe(ref NativeStore store, int width, int height, float speed, int seed = 1337)
+    {
+        unsafe { fixed (NativeStore* p = &store) SeedLinear(p, width, height, speed, seed); }
+    }
+
+    /// <summary>Safe-facade for <see cref="Dispose"/>. Takes the store by reference.</summary>
+    /// <remarks>TRANSITORY SCOPE: See <see cref="AllocateSafe"/> remarks. Fase 2 may delete.</remarks>
+    public static void DisposeSafe(ref NativeStore store)
+    {
+        unsafe { fixed (NativeStore* p = &store) Dispose(p); }
+    }
 }

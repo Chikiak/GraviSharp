@@ -1,4 +1,9 @@
 <Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/tests/">
+    <Project Path="tests/GraviSharp.Benchmarks/GraviSharp.Benchmarks.csproj" />
+    <Project Path="tests/GraviSharp.NonUnsafeViewConsumerTests/GraviSharp.NonUnsafeViewConsumerTests.csproj" />
+  </Folder>
   <Project Path="src\GraviSharp.Core\GraviSharp.Core.csproj" />
   <Project Path="src\GraviSharp.UI\GraviSharp.UI.csproj" />
   <Project Path="tests\GraviSharp.Tests\GraviSharp.Tests.csproj" />
