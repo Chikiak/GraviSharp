@@ -168,6 +168,51 @@ public static class SimulationStore
         NativeMemory.Clear(store->Fy, bytes);
     }
 
+    /// <summary>Calculates the Newtonian gravitational forces accumulated in Fx/Fy via O(N^2) brute-force.
+    /// Implicit unit mass (m=1) for all integrated bodies in set N. Static attractors with explicit mass
+    /// are handled outside this kernel (see ComputeForcesBruteWith...).</summary>
+    /// <remarks>F = G * dx / (dx*dx + dy*dy + softening^2)^(3/2). Action-reaction symmetry: single computation per pair.</remarks>
+    public static unsafe void ComputeForcesBrute(NativeStore* store, in PhysicsStep step)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot compute forces on a null or disposed NativeStore.");
+
+        int count = store->Count;
+        if (count < 2) return;
+
+        float g = step.G;
+        float softening = step.Softening;
+        float softeningSq = softening * softening;
+
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* fxPtr = store->Fx;
+        float* fyPtr = store->Fy;
+
+        for (int i = 0; i < count - 1; i++)
+        {
+            float xi = xPtr[i];
+            float yi = yPtr[i];
+
+            for (int j = i + 1; j < count; j++)
+            {
+                float dx = xPtr[j] - xi;
+                float dy = yPtr[j] - yi;
+                float distSq = dx * dx + dy * dy + softeningSq;
+                float invDist = MathF.ReciprocalSqrtEstimate(distSq);
+                float invDist3 = invDist * invDist * invDist;
+                float f = g * invDist3;
+                float fx = f * dx;
+                float fy = f * dy;
+
+                fxPtr[i] += fx;
+                fyPtr[i] += fy;
+                fxPtr[j] -= fx;
+                fyPtr[j] -= fy;
+            }
+        }
+    }
+
     /// <summary>Exposes the Fx force accumulator as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
     /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
     public static unsafe ReadOnlySpan<float> ViewFx(in NativeStore store)
