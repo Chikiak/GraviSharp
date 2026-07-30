@@ -15,7 +15,7 @@ public static class SimulationStore
         int alignment = config.Alignment < 64 ? 64 : config.Alignment;
         nuint stride = (nuint)(config.BodyCount * sizeof(float));
         nuint alignedStride = (stride + (nuint)alignment - 1) & ~(nuint)(alignment - 1);
-        nuint totalBytes = alignedStride * 4;
+        nuint totalBytes = alignedStride * 6;
 
         void* basePtr = NativeMemory.AlignedAlloc(totalBytes, (nuint)alignment);
         if (basePtr == null)
@@ -28,6 +28,8 @@ public static class SimulationStore
             Y = (float*)((byte*)basePtr + alignedStride),
             Vx = (float*)((byte*)basePtr + alignedStride * 2),
             Vy = (float*)((byte*)basePtr + alignedStride * 3),
+            Fx = (float*)((byte*)basePtr + alignedStride * 4),
+            Fy = (float*)((byte*)basePtr + alignedStride * 5),
             Count = config.BodyCount,
             ByteAlignment = (nuint)alignment
         };
@@ -49,6 +51,8 @@ public static class SimulationStore
         store->Y = null;
         store->Vx = null;
         store->Vy = null;
+        store->Fx = null;
+        store->Fy = null;
         store->Count = 0;
         store->ByteAlignment = 0;
     }
@@ -153,6 +157,31 @@ public static class SimulationStore
     {
         if (store.Vy is null) return ReadOnlySpan<float>.Empty;
         return new ReadOnlySpan<float>(store.Vy, store.Count);
+    }
+
+    /// <summary>Resets the Fx and Fy force accumulators to zero in O(N) via native memset.</summary>
+    public static unsafe void ClearForces(NativeStore* store)
+    {
+        if (store == null || store->BaseAddress == null) return;
+        nuint bytes = (nuint)store->Count * sizeof(float);
+        NativeMemory.Clear(store->Fx, bytes);
+        NativeMemory.Clear(store->Fy, bytes);
+    }
+
+    /// <summary>Exposes the Fx force accumulator as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
+    /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
+    public static unsafe ReadOnlySpan<float> ViewFx(in NativeStore store)
+    {
+        if (store.Fx is null) return ReadOnlySpan<float>.Empty;
+        return new ReadOnlySpan<float>(store.Fx, store.Count);
+    }
+
+    /// <summary>Exposes the Fy force accumulator as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
+    /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
+    public static unsafe ReadOnlySpan<float> ViewFy(in NativeStore store)
+    {
+        if (store.Fy is null) return ReadOnlySpan<float>.Empty;
+        return new ReadOnlySpan<float>(store.Fy, store.Count);
     }
 
     /// <summary>Safe-facade for <see cref="Allocate"/>. Allows callers without <c>unsafe</c>
