@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace GraviSharp.Core;
@@ -88,8 +89,29 @@ public static class SimulationStore
 
         for (int i = 0; i < count; i++)
         {
-            float x = xPtr[i] + vxPtr[i] * dt;
-            float y = yPtr[i] + vyPtr[i] * dt;
+            xPtr[i] += vxPtr[i] * dt;
+            yPtr[i] += vyPtr[i] * dt;
+        }
+
+        ReflectBounds(store, width, height);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe void ReflectBounds(NativeStore* store, int width, int height)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot reflect bounds on a null or disposed NativeStore.");
+
+        int count = store->Count;
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* vxPtr = store->Vx;
+        float* vyPtr = store->Vy;
+
+        for (int i = 0; i < count; i++)
+        {
+            float x = xPtr[i];
+            float y = yPtr[i];
             float vx = vxPtr[i];
             float vy = vyPtr[i];
 
@@ -121,6 +143,32 @@ public static class SimulationStore
             yPtr[i] = y;
             vxPtr[i] = vx;
             vyPtr[i] = vy;
+        }
+    }
+
+    /// <summary>Applies Symplectic Euler (kick-drift) integration. Assumes m=1 implicit mass.
+    /// Does NOT recalculate forces and does NOT reflect bounds (caller invokes <see cref="ReflectBounds"/> separately if needed).</summary>
+    public static unsafe void IntegrateSymplecticEuler(NativeStore* store, in PhysicsStep step)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot integrate a null or disposed NativeStore.");
+
+        float dt = step.Dt;
+        float damping = step.Damping;
+        int count = store->Count;
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* vxPtr = store->Vx;
+        float* vyPtr = store->Vy;
+        float* fxPtr = store->Fx;
+        float* fyPtr = store->Fy;
+
+        for (int i = 0; i < count; i++)
+        {
+            vxPtr[i] = (vxPtr[i] + fxPtr[i] * dt) * damping;
+            vyPtr[i] = (vyPtr[i] + fyPtr[i] * dt) * damping;
+            xPtr[i] += vxPtr[i] * dt;
+            yPtr[i] += vyPtr[i] * dt;
         }
     }
 
