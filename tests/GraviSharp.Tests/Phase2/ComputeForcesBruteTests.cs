@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using Xunit;
 using GraviSharp.Core;
 
@@ -144,7 +143,7 @@ public class ComputeForcesBruteTests
             SimulationStore.SeedLinear(&store, 1280, 720, 50f, 1337);
             var step = PhysicsStep.Create(1f / 60f);
 
-            long deltaBytes = MeasureComputeForcesAllocationsOnDedicatedThread(&store, in step, 100);
+            long deltaBytes = MeasureComputeForcesAllocations(&store, in step, 100);
             Assert.Equal(0L, deltaBytes);
         }
         finally
@@ -154,35 +153,25 @@ public class ComputeForcesBruteTests
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static unsafe long MeasureComputeForcesAllocationsOnDedicatedThread(NativeStore* store, in PhysicsStep step, int iterations)
+    private static unsafe long MeasureComputeForcesAllocations(NativeStore* store, in PhysicsStep step, int iterations)
     {
-        long delta = -1;
-        PhysicsStep stepLocal = step;
-        NativeStore storeLocal = *store;
-
-        var thread = new Thread(() =>
+        // Warmup the JIT on a separate measurement region (not counted).
+        for (int i = 0; i < 1000; i++)
         {
-            NativeStore s = storeLocal;
-            PhysicsStep st = stepLocal;
+            SimulationStore.ClearForces(store);
+            SimulationStore.ComputeForcesBrute(store, in step);
+        }
 
-            for (int i = 0; i < 1000; i++)
-            {
-                SimulationStore.ClearForces(&s);
-                SimulationStore.ComputeForcesBrute(&s, in st);
-            }
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
 
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < iterations; i++)
-            {
-                SimulationStore.ClearForces(&s);
-                SimulationStore.ComputeForcesBrute(&s, in st);
-            }
-            delta = GC.GetAllocatedBytesForCurrentThread() - before;
-        });
-
-        thread.IsBackground = false;
-        thread.Start();
-        thread.Join();
-        return delta;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+        {
+            SimulationStore.ClearForces(store);
+            SimulationStore.ComputeForcesBrute(store, in step);
+        }
+        return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 }
