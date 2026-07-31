@@ -277,6 +277,68 @@ public static class SimulationStore
         return new ReadOnlySpan<float>(store.Fy, store.Count);
     }
 
+    /// <summary>Seeds a Gaussian-centered random cloud via CLT approximation.
+    /// m=1 implicit. Thermal velocities. Zero forces. Only startup jet allocation: new Random(seed).</summary>
+    public static unsafe void SeedRandomCloud(
+        NativeStore* store, int width, int height, float spread, float thermalSpeed, int seed = 1337)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot seed a null or disposed NativeStore.");
+
+        var rng = new Random(seed);
+        int count = store->Count;
+        float cx = width * 0.5f;
+        float cy = height * 0.5f;
+
+        for (int i = 0; i < count; i++)
+        {
+            float normal = (float)(rng.NextDouble() + rng.NextDouble() + rng.NextDouble() - 1.5);
+            float r = normal * spread;
+            float theta = (float)rng.NextDouble() * MathF.PI * 2f;
+            float x = cx + r * MathF.Cos(theta);
+            float y = cy + r * MathF.Sin(theta);
+            if (x < 0f) x = 0f; else if (x >= width) x = width - 1f;
+            if (y < 0f) y = 0f; else if (y >= height) y = height - 1f;
+            store->X[i] = x;
+            store->Y[i] = y;
+            store->Vx[i] = thermalSpeed * ((float)rng.NextDouble() - 0.5f);
+            store->Vy[i] = thermalSpeed * ((float)rng.NextDouble() - 0.5f);
+        }
+
+        ClearForces(store);
+    }
+
+    /// <summary>Seeds an orbital disk with Keplerian tangential velocity v=sqrt(G*M/r) around a static central mass.
+    /// m=1 implicit for N integrated bodies. centralMass informs v only (atractor integration is PH2-ISSUE-006).
+    ///REQUIRES innerRadius >= 1f. Zero forces. Only startup jet: new Random(seed).</summary>
+    public static unsafe void SeedOrbitalDisk(
+        NativeStore* store, int width, int height, float innerRadius, float outerRadius, float centralMass, int seed = 1337)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot seed a null or disposed NativeStore.");
+        if (innerRadius < 1f)
+            throw new ArgumentOutOfRangeException(nameof(innerRadius), "innerRadius must be >= 1f to avoid division by zero.");
+
+        var rng = new Random(seed);
+        int count = store->Count;
+        float cx = width * 0.5f;
+        float cy = height * 0.5f;
+        float g = PhysicsConstants.G;
+
+        for (int i = 0; i < count; i++)
+        {
+            float r = innerRadius + (float)rng.NextDouble() * (outerRadius - innerRadius);
+            float theta = (float)rng.NextDouble() * MathF.PI * 2f;
+            store->X[i] = cx + r * MathF.Cos(theta);
+            store->Y[i] = cy + r * MathF.Sin(theta);
+            float v = MathF.Sqrt(g * centralMass / r);
+            store->Vx[i] = -v * MathF.Sin(theta);
+            store->Vy[i] =  v * MathF.Cos(theta);
+        }
+
+        ClearForces(store);
+    }
+
     /// <summary>Safe-facade for <see cref="Allocate"/>. Allows callers without <c>unsafe</c>
     /// context to obtain a <see cref="NativeStore"/>.</summary>
     /// <remarks>TRANSITORY SCOPE: This wrapper exists exclusively to satisfy TC-PH1-002 criterion
