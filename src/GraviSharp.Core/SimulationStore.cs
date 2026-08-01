@@ -261,6 +261,72 @@ public static class SimulationStore
         }
     }
 
+    /// <summary>O(N^2) brute-force with static central attractor (BlackHoleDisk). 
+    /// Attractor contributes to Fx[i]/Fy[i] only (static, not integrated). 
+    /// Will be refactored to ComputeForcesBruteWithAttractors in PH2-ISSUE-010.</summary>
+    public static unsafe void ComputeForcesBruteWithCentral(
+        NativeStore* store, float bhX, float bhY, float bhMass, in PhysicsStep step)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot compute forces on a null or disposed NativeStore.");
+        if (bhMass <= 0f)
+            throw new ArgumentOutOfRangeException(nameof(bhMass), "bhMass must be > 0f.");
+
+        int count = store->Count;
+        float g = step.G;
+        float softening = step.Softening;
+        float softeningSq = softening * softening;
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* fxPtr = store->Fx;
+        float* fyPtr = store->Fy;
+
+        for (int i = 0; i < count - 1; i++)
+        {
+            float xi = xPtr[i];
+            float yi = yPtr[i];
+
+            // Body-body pair (action-reaction, identical to ComputeForcesBrute)
+            for (int j = i + 1; j < count; j++)
+            {
+                float dx = xPtr[j] - xi;
+                float dy = yPtr[j] - yi;
+                float distSq = dx * dx + dy * dy + softeningSq;
+                float invDist = MathF.ReciprocalSqrtEstimate(distSq);
+                float invDist3 = invDist * invDist * invDist;
+                float f = g * invDist3;
+                float fx = f * dx;
+                float fy = f * dy;
+                fxPtr[i] += fx; fyPtr[i] += fy;
+                fxPtr[j] -= fx; fyPtr[j] -= fy;
+            }
+
+            // Static central attractor (BH contributes only to body i)
+            float bdx = bhX - xi;
+            float bdy = bhY - yi;
+            float bDistSq = bdx * bdx + bdy * bdy + softeningSq;
+            float bInvDist = MathF.ReciprocalSqrtEstimate(bDistSq);
+            float bInvDist3 = bInvDist * bInvDist * bInvDist;
+            float fbh = g * bhMass * bInvDist3;
+            fxPtr[i] += fbh * bdx;
+            fyPtr[i] += fbh * bdy;
+        }
+
+        // i == count - 1: skip body-body (no j > i), but still pull by BH
+        if (count > 0)
+        {
+            int i = count - 1;
+            float bdx = bhX - xPtr[i];
+            float bdy = bhY - yPtr[i];
+            float bDistSq = bdx * bdx + bdy * bdy + softeningSq;
+            float bInvDist = MathF.ReciprocalSqrtEstimate(bDistSq);
+            float bInvDist3 = bInvDist * bInvDist * bInvDist;
+            float fbh = g * bhMass * bInvDist3;
+            fxPtr[i] += fbh * bdx;
+            fyPtr[i] += fbh * bdy;
+        }
+    }
+
     /// <summary>Exposes the Fx force accumulator as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
     /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
     public static unsafe ReadOnlySpan<float> ViewFx(in NativeStore store)
