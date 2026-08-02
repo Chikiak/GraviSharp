@@ -374,6 +374,44 @@ public static class SimulationStore
         ClearForces(store);
     }
 
+    /// <summary>Seeds a uniform random field across the entire screen with isotropic random velocities.
+    /// Each body receives X ∈ [0, width), Y ∈ [0, height) uniformly distributed (no central bias).
+    /// Velocity direction uniform in [0, 2π) and magnitude uniformly distributed in [0, maxSpeed].
+    /// m=1 implicit. Zero forces. Only startup jet allocation: new Random(seed).</summary>
+    /// <remarks>Unlike <see cref="SeedRandomCloud"/> (Gaussian-centered) or <see cref="SeedOrbitalDisk"/>
+    /// (radial structure), this seeder produces a flat isotropic field that lets N-body gravity
+    /// cluster bodies without any preset geometric structure. Useful for observing spontaneous
+    /// gravitational aggregation from a uniform initial state.
+    /// REQUIRES maxSpeed >= 0. Zero GC in hot-path</remarks>
+    public static unsafe void SeedUniformField(
+        NativeStore* store, int width, int height, float maxSpeed, int seed = 1337)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot seed a null or disposed NativeStore.");
+        if (maxSpeed < 0f)
+            throw new ArgumentOutOfRangeException(nameof(maxSpeed), "maxSpeed must be >= 0f.");
+
+        var rng = new Random(seed);
+        int count = store->Count;
+
+        for (int i = 0; i < count; i++)
+        {
+            store->X[i] = (float)rng.NextDouble() * width;
+            store->Y[i] = (float)rng.NextDouble() * height;
+
+            // Velocidad isotrópica: dirección uniforme en [0, 2π) y módulo uniforme en [0, maxSpeed].
+            // Forma con sqrt(r) sobre uniforme para densidad uniforme sobre el disco de velocidades:
+            // muestrear módulo uniforme directo produce densidad NO uniforme (sesgo a radios altos).
+            float u = (float)rng.NextDouble();
+            float speed = MathF.Sqrt(u) * maxSpeed;
+            float angle = (float)rng.NextDouble() * MathF.PI * 2f;
+            store->Vx[i] = speed * MathF.Cos(angle);
+            store->Vy[i] = speed * MathF.Sin(angle);
+        }
+
+        ClearForces(store);
+    }
+
     /// <summary>Seeds an orbital disk with Keplerian tangential velocity v=sqrt(G*M/r) around a static central mass.
     /// m=1 implicit for N integrated bodies. centralMass informs v only (atractor integration is PH2-ISSUE-006).
     ///REQUIRES innerRadius >= 1f. Zero forces. Only startup jet: new Random(seed).</summary>
