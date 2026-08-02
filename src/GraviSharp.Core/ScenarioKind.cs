@@ -4,5 +4,6 @@ public enum ScenarioKind
 {
     RandomCloud,
     OrbitalDisk,
-    BlackHoleDisk
+    BlackHoleDisk,
+    UniformField
 }
