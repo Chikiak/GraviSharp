@@ -24,13 +24,14 @@ public unsafe class PhysicsConservationTests
         {
             // Two bodies orbiting barycenter
             // Distance = 80 px (40 px each from center 640,360)
-            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -38.7298f; // v = sqrt(G*M/r) approx
-            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = 38.7298f;
+            float v = MathF.Sqrt(PhysicsConstants.G);
+            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -v; // v = sqrt(G*M/r) approx
+            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = v;
 
             var step = PhysicsStep.Create(1f / 60f, softening: 8f, damping: 1f);
 
-            float initialEnergy = PhysicsEnergyMetrics.TotalEnergy(&store, step.G, step.Softening);
-            (float p0x, float p0y) = PhysicsEnergyMetrics.LinearMomentum(&store);
+            float initialEnergy = PhysicsDiagnostics.TotalEnergy(&store, step.G, step.Softening);
+            (float p0x, float p0y) = PhysicsDiagnostics.LinearMomentum(&store);
 
             for (int i = 0; i < Ticks1000; i++)
             {
@@ -39,8 +40,8 @@ public unsafe class PhysicsConservationTests
                 SimulationStore.IntegrateSymplecticEuler(&store, in step);
             }
 
-            float finalEnergy = PhysicsEnergyMetrics.TotalEnergy(&store, step.G, step.Softening);
-            (float p1x, float p1y) = PhysicsEnergyMetrics.LinearMomentum(&store);
+            float finalEnergy = PhysicsDiagnostics.TotalEnergy(&store, step.G, step.Softening);
+            (float p1x, float p1y) = PhysicsDiagnostics.LinearMomentum(&store);
 
             float energyDrift = MathF.Abs(finalEnergy - initialEnergy) / (MathF.Abs(initialEnergy) + 1e-6f);
             float momentumDriftX = MathF.Abs(p1x - p0x) / (MathF.Abs(p0x) + 1f);
@@ -83,8 +84,8 @@ public unsafe class PhysicsConservationTests
 
             var step = PhysicsStep.Create(1f / 60f, softening: 8f, damping: 1f);
 
-            float initialEnergy = PhysicsEnergyMetrics.TotalEnergy(&store, step.G, step.Softening);
-            (float p0x, float p0y) = PhysicsEnergyMetrics.LinearMomentum(&store);
+            float initialEnergy = PhysicsDiagnostics.TotalEnergy(&store, step.G, step.Softening);
+            (float p0x, float p0y) = PhysicsDiagnostics.LinearMomentum(&store);
 
             for (int i = 0; i < Ticks1000; i++)
             {
@@ -93,8 +94,8 @@ public unsafe class PhysicsConservationTests
                 SimulationStore.IntegrateSymplecticEuler(&store, in step);
             }
 
-            float finalEnergy = PhysicsEnergyMetrics.TotalEnergy(&store, step.G, step.Softening);
-            (float p1x, float p1y) = PhysicsEnergyMetrics.LinearMomentum(&store);
+            float finalEnergy = PhysicsDiagnostics.TotalEnergy(&store, step.G, step.Softening);
+            (float p1x, float p1y) = PhysicsDiagnostics.LinearMomentum(&store);
 
             float energyDrift = MathF.Abs(finalEnergy - initialEnergy) / (MathF.Abs(initialEnergy) + 1e-6f);
             float momentumDriftX = MathF.Abs(p1x - p0x) / (MathF.Abs(p0x) + 1f);
@@ -192,12 +193,13 @@ public unsafe class PhysicsConservationTests
 
         try
         {
-            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -38.7298f;
-            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = 38.7298f;
+            float v = MathF.Sqrt(PhysicsConstants.G);
+            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -v;
+            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = v;
 
             var step = PhysicsStep.Create(1f / 60f, softening: 8f, damping: 1f);
 
-            string csvPath = Path.Combine(RepoRootLocator.FindAcceptanceDir(), "phase2_tc1_energy_momentum.csv");
+            string csvPath = Path.Combine(AcceptancePaths.FindAcceptanceDir(), "phase2_tc1_energy_momentum.csv");
             string? dir = Path.GetDirectoryName(csvPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
@@ -211,11 +213,11 @@ public unsafe class PhysicsConservationTests
             {
                 if (i % 10 == 0)
                 {
-                    float k = PhysicsEnergyMetrics.KineticEnergy(&store);
-                    float u = PhysicsEnergyMetrics.PotentialEnergy(&store, step.G, step.Softening);
+                    float k = PhysicsDiagnostics.KineticEnergy(&store);
+                    float u = PhysicsDiagnostics.PotentialEnergy(&store, step.G, step.Softening);
                     float et = k + u;
-                    (float px, float py) = PhysicsEnergyMetrics.LinearMomentum(&store);
-                    (float cx, float cy) = PhysicsEnergyMetrics.CenterOfMass(&store);
+                    (float px, float py) = PhysicsDiagnostics.LinearMomentum(&store);
+                    (float cx, float cy) = PhysicsDiagnostics.CenterOfMass(&store);
                     writer.WriteLine($"{i},{et:F4},{k:F4},{u:F4},{px:F4},{py:F4},{cx:F2},{cy:F2}");
                 }
 
@@ -235,90 +237,5 @@ public unsafe class PhysicsConservationTests
         {
             SimulationStore.Dispose(&store);
         }
-    }
-}
-
-internal static class RepoRootLocator
-{
-    public static string FindAcceptanceDir()
-    {
-        string dir = AppContext.BaseDirectory;
-        for (int i = 0; i < 12; i++)
-        {
-            string candidate = Path.Combine(dir, "plans", "acceptance");
-            if (Directory.Exists(candidate)) return candidate;
-            var parent = Directory.GetParent(dir);
-            if (parent is null) break;
-            dir = parent.FullName;
-        }
-        throw new DirectoryNotFoundException("Could not locate 'plans/acceptance' by walking up from AppContext.BaseDirectory.");
-    }
-}
-
-internal static unsafe class PhysicsEnergyMetrics
-{
-    public static float KineticEnergy(NativeStore* store)
-    {
-        float k = 0f;
-        int count = store->Count;
-        for (int i = 0; i < count; i++)
-        {
-            float vx = store->Vx[i];
-            float vy = store->Vy[i];
-            k += 0.5f * (vx * vx + vy * vy);
-        }
-        return k;
-    }
-
-    public static float PotentialEnergy(NativeStore* store, float g, float softening)
-    {
-        float u = 0f;
-        int count = store->Count;
-        float softSq = softening * softening;
-        for (int i = 0; i < count - 1; i++)
-        {
-            float xi = store->X[i];
-            float yi = store->Y[i];
-            for (int j = i + 1; j < count; j++)
-            {
-                float dx = store->X[j] - xi;
-                float dy = store->Y[j] - yi;
-                float rSq = dx * dx + dy * dy + softSq;
-                float r = MathF.Sqrt(rSq);
-                // U = - G * m_i * m_j / r (with m=1)
-                u -= g / r;
-            }
-        }
-        return u;
-    }
-
-    public static float TotalEnergy(NativeStore* store, float g, float softening)
-    {
-        return KineticEnergy(store) + PotentialEnergy(store, g, softening);
-    }
-
-    public static (float px, float py) LinearMomentum(NativeStore* store)
-    {
-        float px = 0f, py = 0f;
-        int count = store->Count;
-        for (int i = 0; i < count; i++)
-        {
-            px += store->Vx[i];
-            py += store->Vy[i];
-        }
-        return (px, py);
-    }
-
-    public static (float cx, float cy) CenterOfMass(NativeStore* store)
-    {
-        float cx = 0f, cy = 0f;
-        int count = store->Count;
-        if (count == 0) return (0f, 0f);
-        for (int i = 0; i < count; i++)
-        {
-            cx += store->X[i];
-            cy += store->Y[i];
-        }
-        return (cx / count, cy / count);
     }
 }
