@@ -81,6 +81,7 @@ internal static unsafe class Program
         // Dt, Softening y Damping idénticos al step estándar — sólo difiere G.
         PhysicsStep uniformStep = PhysicsStep.Create(1f / 60f, g: UniformFieldG);
         bool paused = false;
+        bool bounce = true;
         int frameIndex = 0;
 
         while (!Raylib.WindowShouldClose())
@@ -108,6 +109,8 @@ internal static unsafe class Program
 
             if (Raylib.IsKeyPressed(KeyboardKey.Space))
                 paused = !paused;
+            if (Raylib.IsKeyPressed(KeyboardKey.B))
+                bounce = !bounce;
 
             // PHYSICS PIPELINE (skipped while paused — render still runs)
             if (!paused)
@@ -119,7 +122,8 @@ internal static unsafe class Program
                 else
                     SimulationStore.ComputeForcesBrute(&store, in activeStep);
                 SimulationStore.IntegrateSymplecticEuler(&store, in activeStep);
-				SimulationStore.ReflectBounds(&store, WindowWidth, WindowHeight);
+                if (bounce)
+				    SimulationStore.ReflectBounds(&store, WindowWidth, WindowHeight);
             }
 
             // RENDER
