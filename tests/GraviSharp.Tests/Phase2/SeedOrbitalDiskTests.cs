@@ -55,13 +55,14 @@ public unsafe class SeedOrbitalDiskTests
         const float outer = 300f;
         const float centralMass = 10000f;
         const float g = PhysicsConstants.G;
+        const float soft = PhysicsConstants.DefaultSoftening;
 
         var config = new SimulationConfig(N, Width, Height, 64);
         NativeStore store = SimulationStore.Allocate(in config);
 
         try
         {
-            SimulationStore.SeedOrbitalDisk(&store, Width, Height, inner, outer, centralMass, seed: 1337);
+            SimulationStore.SeedOrbitalDisk(&store, Width, Height, inner, outer, centralMass, softening: soft, seed: 1337);
 
             int sampleStep = 5; // sample 1000 of 5000
             int samples = 0;
@@ -71,7 +72,10 @@ public unsafe class SeedOrbitalDiskTests
                 float dy = store.Y[i] - Cy;
                 float r = MathF.Sqrt(dx * dx + dy * dy);
                 float velMag = MathF.Sqrt(store.Vx[i] * store.Vx[i] + store.Vy[i] * store.Vy[i]);
-                float expected = MathF.Sqrt(g * centralMass / r);
+                // Softening-corrected Keplerian: v = r * sqrt( G * M / (r^2 + soft^2)^1.5 )
+                float rSqSoft = r * r + soft * soft;
+                float rSqSoftPow = rSqSoft * MathF.Sqrt(rSqSoft);
+                float expected = r * MathF.Sqrt(g * centralMass / rSqSoftPow);
 
                 Assert.Equal(expected, velMag, 1e-2f);
 
@@ -80,6 +84,42 @@ public unsafe class SeedOrbitalDiskTests
                 samples++;
             }
             Assert.True(samples == 1000, $"Expected exactly 1000 sampled bodies, got {samples}");
+        }
+        finally
+        {
+            SimulationStore.Dispose(&store);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Phase2")]
+    [Trait("Category", "SeedUnit")]
+    public void SeedOrbitalDisk_VelocityDegeneratesToPureKepler_WhenSofteningZero()
+    {
+        // Backward-compat contract: with softening=0 the formula reduces to v = sqrt(G*M/r).
+        const int N = 1000;
+        const float inner = 50f;
+        const float outer = 300f;
+        const float centralMass = 10000f;
+        const float g = PhysicsConstants.G;
+
+        var config = new SimulationConfig(N, Width, Height, 64);
+        NativeStore store = SimulationStore.Allocate(in config);
+
+        try
+        {
+            SimulationStore.SeedOrbitalDisk(&store, Width, Height, inner, outer, centralMass, softening: 0f, seed: 1337);
+
+            for (int i = 0; i < N; i += 10)
+            {
+                float dx = store.X[i] - Cx;
+                float dy = store.Y[i] - Cy;
+                float r = MathF.Sqrt(dx * dx + dy * dy);
+                float velMag = MathF.Sqrt(store.Vx[i] * store.Vx[i] + store.Vy[i] * store.Vy[i]);
+                float expected = MathF.Sqrt(g * centralMass / r);
+
+                Assert.Equal(expected, velMag, 1e-2f);
+            }
         }
         finally
         {

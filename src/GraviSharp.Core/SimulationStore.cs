@@ -412,22 +412,33 @@ public static class SimulationStore
         ClearForces(store);
     }
 
-    /// <summary>Seeds an orbital disk with Keplerian tangential velocity v=sqrt(G*M/r) around a static central mass.
+    /// <summary>Seeds an orbital disk with Keplerian tangential velocity around a static central mass.
     /// m=1 implicit for N integrated bodies. centralMass informs v only (atractor integration is PH2-ISSUE-006).
-    ///REQUIRES innerRadius >= 1f. Zero forces. Only startup jet: new Random(seed).</summary>
+    /// REQUIRES innerRadius >= 1f. Zero forces. Only startup jet: new Random(seed).
+    /// Velocity formula is softening-corrected to match the force kernel
+    /// ComputeForcesBruteWithCentral (which applies F = G*M*r / (r^2 + soft^2)^1.5):
+    ///   v = r * sqrt( G * M / (r^2 + soft^2)^1.5 )
+    /// For softening = 0 the formula degenerates to v = sqrt(G*M/r) (prior contract — backward compatible).
+    /// Mismatch between seed velocity and kernel softening causes radial drift (TC-PH2-002 spec calibration).</summary>
     public static unsafe void SeedOrbitalDisk(
-        NativeStore* store, int width, int height, float innerRadius, float outerRadius, float centralMass, int seed = 1337)
+        NativeStore* store, int width, int height,
+        float innerRadius, float outerRadius, float centralMass,
+        float softening = PhysicsConstants.DefaultSoftening,
+        int seed = 1337)
     {
         if (store == null || store->BaseAddress == null)
             throw new InvalidOperationException("Cannot seed a null or disposed NativeStore.");
         if (innerRadius < 1f)
             throw new ArgumentOutOfRangeException(nameof(innerRadius), "innerRadius must be >= 1f to avoid division by zero.");
+        if (softening < 0f)
+            throw new ArgumentOutOfRangeException(nameof(softening), "softening must be >= 0f.");
 
         var rng = new Random(seed);
         int count = store->Count;
         float cx = width * 0.5f;
         float cy = height * 0.5f;
         float g = PhysicsConstants.G;
+        float softSq = softening * softening;
 
         for (int i = 0; i < count; i++)
         {
@@ -435,7 +446,11 @@ public static class SimulationStore
             float theta = (float)rng.NextDouble() * MathF.PI * 2f;
             store->X[i] = cx + r * MathF.Cos(theta);
             store->Y[i] = cy + r * MathF.Sin(theta);
-            float v = MathF.Sqrt(g * centralMass / r);
+            // v = r * sqrt( G * M / (r^2 + soft^2)^1.5 ) with (r^2 + soft^2)^1.5 = rSqSoft * sqrt(rSqSoft).
+            // When soft=0 this reduces to r * sqrt(G*M/r^3) = sqrt(G*M/r).
+            float rSqSoft = r * r + softSq;
+            float rSqSoftPow = rSqSoft * MathF.Sqrt(rSqSoft);
+            float v = r * MathF.Sqrt(g * centralMass / rSqSoftPow);
             store->Vx[i] = -v * MathF.Sin(theta);
             store->Vy[i] =  v * MathF.Cos(theta);
         }

@@ -21,16 +21,17 @@ public unsafe class PhysicsHudTests
 
         try
         {
-            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -38.7298f;
-            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = 38.7298f;
+            float v = MathF.Sqrt(PhysicsConstants.G);
+            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -v;
+            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = v;
 
             PhysicsDiagnostics.ComputeDiagnostics(&store, out float k, out float px, out float py, out float cx, out float cy);
 
-            Assert.Equal(PhysicsEnergyMetrics.KineticEnergy(&store), k, 1e-3f);
-            (float opx, float opy) = PhysicsEnergyMetrics.LinearMomentum(&store);
+            Assert.Equal(PhysicsDiagnostics.KineticEnergy(&store), k, 1e-3f);
+            (float opx, float opy) = PhysicsDiagnostics.LinearMomentum(&store);
             Assert.Equal(opx, px, 1e-3f);
             Assert.Equal(opy, py, 1e-3f);
-            (float ocx, float ocy) = PhysicsEnergyMetrics.CenterOfMass(&store);
+            (float ocx, float ocy) = PhysicsDiagnostics.CenterOfMass(&store);
             Assert.Equal(ocx, cx, 1e-3f);
             Assert.Equal(ocy, cy, 1e-3f);
         }
@@ -53,12 +54,13 @@ public unsafe class PhysicsHudTests
 
         try
         {
+            float v = MathF.Sqrt(PhysicsConstants.G);
             // Mirror pair 1: (600, 360) <-> (680, 360), vy mirrored
-            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -38.7298f;
-            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = 38.7298f;
+            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -v;
+            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = v;
             // Mirror pair 2: (640, 300) <-> (640, 420), vx mirrored
-            store.X[2] = 640f; store.Y[2] = 300f; store.Vx[2] = 38.7298f; store.Vy[2] = 0f;
-            store.X[3] = 640f; store.Y[3] = 420f; store.Vx[3] = -38.7298f; store.Vy[3] = 0f;
+            store.X[2] = 640f; store.Y[2] = 300f; store.Vx[2] = v; store.Vy[2] = 0f;
+            store.X[3] = 640f; store.Y[3] = 420f; store.Vx[3] = -v; store.Vy[3] = 0f;
 
             var step = PhysicsStep.Create(1f / 60f, softening: 8f, damping: 1f);
 
@@ -96,12 +98,13 @@ public unsafe class PhysicsHudTests
 
         try
         {
-            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -38.7298f;
-            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = 38.7298f;
+            float v = MathF.Sqrt(PhysicsConstants.G);
+            store.X[0] = 600f; store.Y[0] = 360f; store.Vx[0] = 0f; store.Vy[0] = -v;
+            store.X[1] = 680f; store.Y[1] = 360f; store.Vx[1] = 0f; store.Vy[1] = v;
 
             var step = PhysicsStep.Create(1f / 60f, softening: 8f, damping: 1f);
 
-            (float p0x, float p0y) = PhysicsEnergyMetrics.LinearMomentum(&store);
+            (float p0x, float p0y) = PhysicsDiagnostics.LinearMomentum(&store);
 
             for (int i = 0; i < 1000; i++)
             {
@@ -135,8 +138,8 @@ public unsafe class PhysicsHudTests
         try
         {
             SimulationStore.SeedOrbitalDisk(&store, 1280, 720,
-                                            innerRadius: 50f, outerRadius: 300f,
-                                            centralMass: 10000f, seed: 1337);
+                                             innerRadius: 50f, outerRadius: 300f,
+                                             centralMass: 10000f, seed: 1337);
 
             long deltaBytes = MeasureComputeDiagnosticsAllocations(&store, 1000);
             Assert.Equal(0L, deltaBytes);
@@ -158,8 +161,8 @@ public unsafe class PhysicsHudTests
         try
         {
             SimulationStore.SeedOrbitalDisk(&store, 1280, 720,
-                                            innerRadius: 50f, outerRadius: 300f,
-                                            centralMass: 10000f, seed: 1337);
+                                             innerRadius: 50f, outerRadius: 300f,
+                                             centralMass: 10000f, seed: 1337);
 
             const int Warmup = 100;
             for (int i = 0; i < Warmup; i++)
