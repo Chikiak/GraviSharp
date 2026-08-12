@@ -83,6 +83,7 @@ internal static unsafe class Program
         bool paused = false;
         bool bounce = true;
         int frameIndex = 0;
+		Span<StaticAttractor> bhAttractorSpan = stackalloc StaticAttractor[1];
 
         while (!Raylib.WindowShouldClose())
         {
@@ -117,10 +118,17 @@ internal static unsafe class Program
             {
                 PhysicsStep activeStep = currentScenario == ScenarioKind.UniformField ? uniformStep : step;
                 SimulationStore.ClearForces(&store);
+                
                 if (currentScenario == ScenarioKind.BlackHoleDisk)
-                    SimulationStore.ComputeForcesBruteWithCentral(&store, BhX, BhY, BhMass, in activeStep);
+                {
+                    StaticAttractor bhAttractor = new(BhX, BhY, BhMass);
+                    SimulationStore.ComputeForcesBruteWithAttractors(&store, new ReadOnlySpan<StaticAttractor>(&bhAttractor, 1), in activeStep);
+                }
                 else
-                    SimulationStore.ComputeForcesBrute(&store, in activeStep);
+                {
+                    SimulationStore.ComputeForcesBruteWithAttractors(&store, ReadOnlySpan<StaticAttractor>.Empty, in activeStep);
+                }
+                
                 SimulationStore.IntegrateSymplecticEuler(&store, in activeStep);
                 if (bounce)
 				    SimulationStore.ReflectBounds(&store, WindowWidth, WindowHeight);
