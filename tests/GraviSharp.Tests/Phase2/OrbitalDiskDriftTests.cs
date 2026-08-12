@@ -129,11 +129,13 @@ public unsafe class OrbitalDiskDriftTests
             }
 
             var step = PhysicsStep.Create(1f / 60f, softening: Softening, damping: 1f, g: PhysicsConstants.G);
+            Span<StaticAttractor> attr = stackalloc StaticAttractor[1];
+            attr[0] = new StaticAttractor(BhX, BhY, CentralMass);
 
             for (int t = 0; t < Ticks; t++)
             {
                 SimulationStore.ClearForces(&store);
-                SimulationStore.ComputeForcesBruteWithCentral(&store, BhX, BhY, CentralMass, in step);
+                SimulationStore.ComputeForcesBruteWithAttractors(&store, attr, in step);
                 SimulationStore.IntegrateSymplecticEuler(&store, in step);
             }
 

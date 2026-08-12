@@ -27,7 +27,7 @@ public class ScenarioSwitchTests
     [Fact]
     [Trait("Category", "Phase2")]
     [Trait("Category", "ScenarioSwitch")]
-    public unsafe void ComputeForcesBruteWithCentral_AddsStaticAttractorPull()
+    public unsafe void ComputeForcesBruteWithAttractors_AddsStaticAttractorPull()
     {
         // Use a single-body store so only the BH contributes (no body-body pair interactions).
         var cfg = new SimulationConfig(1, Width, Height, Alignment);
@@ -42,7 +42,9 @@ public class ScenarioSwitchTests
 
             PhysicsStep step = PhysicsStep.Create(1f / 60f);
             SimulationStore.ClearForces(&store);
-            SimulationStore.ComputeForcesBruteWithCentral(&store, BhX, BhY, BhMass, in step);
+            Span<StaticAttractor> attr = stackalloc StaticAttractor[1];
+            attr[0] = new StaticAttractor(BhX, BhY, BhMass);
+            SimulationStore.ComputeForcesBruteWithAttractors(&store, attr, in step);
 
             ReadOnlySpan<float> x = SimulationStore.ViewX(in store);
             ReadOnlySpan<float> y = SimulationStore.ViewY(in store);
@@ -67,7 +69,7 @@ public class ScenarioSwitchTests
     [Fact]
     [Trait("Category", "Phase2")]
     [Trait("Category", "ScenarioSwitch")]
-    public unsafe void ComputeForcesBruteWithCentral_ThrowsOnInvalidArgs()
+    public unsafe void ComputeForcesBruteWithAttractors_ThrowsOnInvalidArgs()
     {
         var (store, _) = Allocate();
         NativeStore* pStore = &store;
@@ -75,21 +77,19 @@ public class ScenarioSwitchTests
         {
             PhysicsStep step = PhysicsStep.Create(1f / 60f);
 
-            Assert.Throws<InvalidOperationException>(
-                () => SimulationStore.ComputeForcesBruteWithCentral(null, BhX, BhY, BhMass, in step));
+            Assert.Throws<InvalidOperationException>(() =>
+                SimulationStore.ComputeForcesBruteWithAttractors(null, ReadOnlySpan<StaticAttractor>.Empty, in step));
+                
+            StaticAttractor[] zeroMassAttr = [ new(BhX, BhY, 0f) ];
             Assert.Throws<ArgumentOutOfRangeException>(
-                () => CallComputeWithCentralZeroMass(pStore, BhX, BhY, in step));
+                () => SimulationStore.ComputeForcesBruteWithAttractors(pStore, zeroMassAttr, in step));
+            
+            StaticAttractor[] negMassAttr = [ new(BhX, BhY, -1f) ];
             Assert.Throws<ArgumentOutOfRangeException>(
-                () => CallComputeWithCentralNegativeMass(pStore, BhX, BhY, in step));
+                () => SimulationStore.ComputeForcesBruteWithAttractors(pStore, negMassAttr, in step));
         }
         finally { Cleanup(pStore); }
     }
-
-    private static unsafe void CallComputeWithCentralZeroMass(NativeStore* store, float bhX, float bhY, in PhysicsStep step)
-        => SimulationStore.ComputeForcesBruteWithCentral(store, bhX, bhY, 0f, in step);
-
-    private static unsafe void CallComputeWithCentralNegativeMass(NativeStore* store, float bhX, float bhY, in PhysicsStep step)
-        => SimulationStore.ComputeForcesBruteWithCentral(store, bhX, bhY, -1f, in step);
 
     [Fact]
     [Trait("Category", "Phase2")]
