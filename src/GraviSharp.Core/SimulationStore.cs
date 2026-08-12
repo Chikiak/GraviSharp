@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace GraviSharp.Core;
@@ -15,7 +16,7 @@ public static class SimulationStore
         int alignment = config.Alignment < 64 ? 64 : config.Alignment;
         nuint stride = (nuint)(config.BodyCount * sizeof(float));
         nuint alignedStride = (stride + (nuint)alignment - 1) & ~(nuint)(alignment - 1);
-        nuint totalBytes = alignedStride * 4;
+        nuint totalBytes = alignedStride * 6;
 
         void* basePtr = NativeMemory.AlignedAlloc(totalBytes, (nuint)alignment);
         if (basePtr == null)
@@ -28,6 +29,8 @@ public static class SimulationStore
             Y = (float*)((byte*)basePtr + alignedStride),
             Vx = (float*)((byte*)basePtr + alignedStride * 2),
             Vy = (float*)((byte*)basePtr + alignedStride * 3),
+            Fx = (float*)((byte*)basePtr + alignedStride * 4),
+            Fy = (float*)((byte*)basePtr + alignedStride * 5),
             Count = config.BodyCount,
             ByteAlignment = (nuint)alignment
         };
@@ -49,6 +52,8 @@ public static class SimulationStore
         store->Y = null;
         store->Vx = null;
         store->Vy = null;
+        store->Fx = null;
+        store->Fy = null;
         store->Count = 0;
         store->ByteAlignment = 0;
     }
@@ -84,8 +89,29 @@ public static class SimulationStore
 
         for (int i = 0; i < count; i++)
         {
-            float x = xPtr[i] + vxPtr[i] * dt;
-            float y = yPtr[i] + vyPtr[i] * dt;
+            xPtr[i] += vxPtr[i] * dt;
+            yPtr[i] += vyPtr[i] * dt;
+        }
+
+        ReflectBounds(store, width, height);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static unsafe void ReflectBounds(NativeStore* store, int width, int height)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot reflect bounds on a null or disposed NativeStore.");
+
+        int count = store->Count;
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* vxPtr = store->Vx;
+        float* vyPtr = store->Vy;
+
+        for (int i = 0; i < count; i++)
+        {
+            float x = xPtr[i];
+            float y = yPtr[i];
             float vx = vxPtr[i];
             float vy = vyPtr[i];
 
@@ -117,6 +143,32 @@ public static class SimulationStore
             yPtr[i] = y;
             vxPtr[i] = vx;
             vyPtr[i] = vy;
+        }
+    }
+
+    /// <summary>Applies Symplectic Euler (kick-drift) integration. Assumes m=1 implicit mass.
+    /// Does NOT recalculate forces and does NOT reflect bounds (caller invokes <see cref="ReflectBounds"/> separately if needed).</summary>
+    public static unsafe void IntegrateSymplecticEuler(NativeStore* store, in PhysicsStep step)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot integrate a null or disposed NativeStore.");
+
+        float dt = step.Dt;
+        float damping = step.Damping;
+        int count = store->Count;
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* vxPtr = store->Vx;
+        float* vyPtr = store->Vy;
+        float* fxPtr = store->Fx;
+        float* fyPtr = store->Fy;
+
+        for (int i = 0; i < count; i++)
+        {
+            vxPtr[i] = (vxPtr[i] + fxPtr[i] * dt) * damping;
+            vyPtr[i] = (vyPtr[i] + fyPtr[i] * dt) * damping;
+            xPtr[i] += vxPtr[i] * dt;
+            yPtr[i] += vyPtr[i] * dt;
         }
     }
 
@@ -153,6 +205,235 @@ public static class SimulationStore
     {
         if (store.Vy is null) return ReadOnlySpan<float>.Empty;
         return new ReadOnlySpan<float>(store.Vy, store.Count);
+    }
+
+    /// <summary>Resets the Fx and Fy force accumulators to zero in O(N) via native memset.</summary>
+    public static unsafe void ClearForces(NativeStore* store)
+    {
+        if (store == null || store->BaseAddress == null) return;
+        nuint bytes = (nuint)store->Count * sizeof(float);
+        NativeMemory.Clear(store->Fx, bytes);
+        NativeMemory.Clear(store->Fy, bytes);
+    }
+
+    /// <summary>Calculates the Newtonian gravitational forces accumulated in Fx/Fy via O(N^2) brute-force.
+    /// Implicit unit mass (m=1) for all integrated bodies in set N. Static attractors with explicit mass
+    /// are handled outside this kernel (see ComputeForcesBruteWith...).</summary>
+    /// <remarks>F = G * dx / (dx*dx + dy*dy + softening^2)^(3/2). Action-reaction symmetry: single computation per pair.</remarks>
+    public static unsafe void ComputeForcesBrute(NativeStore* store, in PhysicsStep step)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot compute forces on a null or disposed NativeStore.");
+
+        int count = store->Count;
+        if (count < 2) return;
+
+        float g = step.G;
+        float softening = step.Softening;
+        float softeningSq = softening * softening;
+
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* fxPtr = store->Fx;
+        float* fyPtr = store->Fy;
+
+        for (int i = 0; i < count - 1; i++)
+        {
+            float xi = xPtr[i];
+            float yi = yPtr[i];
+
+            for (int j = i + 1; j < count; j++)
+            {
+                float dx = xPtr[j] - xi;
+                float dy = yPtr[j] - yi;
+                float distSq = dx * dx + dy * dy + softeningSq;
+                float invDist = MathF.ReciprocalSqrtEstimate(distSq);
+                float invDist3 = invDist * invDist * invDist;
+                float f = g * invDist3;
+                float fx = f * dx;
+                float fy = f * dy;
+
+                fxPtr[i] += fx;
+                fyPtr[i] += fy;
+                fxPtr[j] -= fx;
+                fyPtr[j] -= fy;
+            }
+        }
+    }
+
+    
+    public static unsafe void ComputeForcesBruteWithAttractors(
+        NativeStore* store, scoped ReadOnlySpan<StaticAttractor> attractors, in PhysicsStep step)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot compute forces on a null or disposed NativeStore.");
+    
+        // 1. Ejecutar fuerzas N-body inter-cuerpo (O(N^2))
+        ComputeForcesBrute(store, in step);
+    
+        if (attractors.IsEmpty) return;
+    
+        int count = store->Count;
+        float g = step.G;
+        float softening = step.Softening;
+        float softeningSq = softening * softening;
+        float* xPtr = store->X;
+        float* yPtr = store->Y;
+        float* fxPtr = store->Fx;
+        float* fyPtr = store->Fy;
+    
+        // 2. Acumular fuerzas de atractores estáticos (O(N * A))
+        for (int a = 0; a < attractors.Length; a++)
+        {
+            float ax = attractors[a].X;
+            float ay = attractors[a].Y;
+            float am = attractors[a].Mass;
+            if (am <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(attractors), "Attractor mass must be > 0f.");
+    
+            for (int i = 0; i < count; i++)
+            {
+                float dx = ax - xPtr[i];
+                float dy = ay - yPtr[i];
+                float distSq = dx * dx + dy * dy + softeningSq;
+                float invDist = MathF.ReciprocalSqrtEstimate(distSq);
+                float invDist3 = invDist * invDist * invDist;
+                float fbh = g * am * invDist3;
+                fxPtr[i] += fbh * dx;
+                fyPtr[i] += fbh * dy;
+            }
+        }
+    }
+
+    /// <summary>Exposes the Fx force accumulator as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
+    /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
+    public static unsafe ReadOnlySpan<float> ViewFx(in NativeStore store)
+    {
+        if (store.Fx is null) return ReadOnlySpan<float>.Empty;
+        return new ReadOnlySpan<float>(store.Fx, store.Count);
+    }
+
+    /// <summary>Exposes the Fy force accumulator as a zero-copy <see cref="ReadOnlySpan{float}"/>.</summary>
+    /// <remarks>LIFETIME CONTRACT: Aliases store native memory. Returns empty if disposed.</remarks>
+    public static unsafe ReadOnlySpan<float> ViewFy(in NativeStore store)
+    {
+        if (store.Fy is null) return ReadOnlySpan<float>.Empty;
+        return new ReadOnlySpan<float>(store.Fy, store.Count);
+    }
+
+    /// <summary>Seeds a Gaussian-centered random cloud via CLT approximation.
+    /// m=1 implicit. Thermal velocities. Zero forces. Only startup jet allocation: new Random(seed).</summary>
+    public static unsafe void SeedRandomCloud(
+        NativeStore* store, int width, int height, float spread, float thermalSpeed, int seed = 1337)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot seed a null or disposed NativeStore.");
+
+        var rng = new Random(seed);
+        int count = store->Count;
+        float cx = width * 0.5f;
+        float cy = height * 0.5f;
+
+        for (int i = 0; i < count; i++)
+        {
+            float normal = (float)(rng.NextDouble() + rng.NextDouble() + rng.NextDouble() - 1.5);
+            float r = normal * spread;
+            float theta = (float)rng.NextDouble() * MathF.PI * 2f;
+            float x = cx + r * MathF.Cos(theta);
+            float y = cy + r * MathF.Sin(theta);
+            if (x < 0f) x = 0f; else if (x >= width) x = width - 1f;
+            if (y < 0f) y = 0f; else if (y >= height) y = height - 1f;
+            store->X[i] = x;
+            store->Y[i] = y;
+            store->Vx[i] = thermalSpeed * ((float)rng.NextDouble() - 0.5f);
+            store->Vy[i] = thermalSpeed * ((float)rng.NextDouble() - 0.5f);
+        }
+
+        ClearForces(store);
+    }
+
+    /// <summary>Seeds a uniform random field across the entire screen with isotropic random velocities.
+    /// Each body receives X ∈ [0, width), Y ∈ [0, height) uniformly distributed (no central bias).
+    /// Velocity direction uniform in [0, 2π) and magnitude uniformly distributed in [0, maxSpeed].
+    /// m=1 implicit. Zero forces. Only startup jet allocation: new Random(seed).</summary>
+    /// <remarks>Unlike <see cref="SeedRandomCloud"/> (Gaussian-centered) or <see cref="SeedOrbitalDisk"/>
+    /// (radial structure), this seeder produces a flat isotropic field that lets N-body gravity
+    /// cluster bodies without any preset geometric structure. Useful for observing spontaneous
+    /// gravitational aggregation from a uniform initial state.
+    /// REQUIRES maxSpeed >= 0. Zero GC in hot-path</remarks>
+    public static unsafe void SeedUniformField(
+        NativeStore* store, int width, int height, float maxSpeed, int seed = 1337)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot seed a null or disposed NativeStore.");
+        if (maxSpeed < 0f)
+            throw new ArgumentOutOfRangeException(nameof(maxSpeed), "maxSpeed must be >= 0f.");
+
+        var rng = new Random(seed);
+        int count = store->Count;
+
+        for (int i = 0; i < count; i++)
+        {
+            store->X[i] = (float)rng.NextDouble() * width;
+            store->Y[i] = (float)rng.NextDouble() * height;
+
+            // Velocidad isotrópica: dirección uniforme en [0, 2π) y módulo uniforme en [0, maxSpeed].
+            // Forma con sqrt(r) sobre uniforme para densidad uniforme sobre el disco de velocidades:
+            // muestrear módulo uniforme directo produce densidad NO uniforme (sesgo a radios altos).
+            float u = (float)rng.NextDouble();
+            float speed = MathF.Sqrt(u) * maxSpeed;
+            float angle = (float)rng.NextDouble() * MathF.PI * 2f;
+            store->Vx[i] = speed * MathF.Cos(angle);
+            store->Vy[i] = speed * MathF.Sin(angle);
+        }
+
+        ClearForces(store);
+    }
+
+    /// <summary>Seeds an orbital disk with Keplerian tangential velocity around a static central mass.
+    /// m=1 implicit for N integrated bodies. centralMass informs v only (atractor integration is PH2-ISSUE-006).
+    /// REQUIRES innerRadius >= 1f. Zero forces. Only startup jet: new Random(seed).
+    /// Velocity formula is softening-corrected to match the force kernel
+    /// ComputeForcesBruteWithCentral (which applies F = G*M*r / (r^2 + soft^2)^1.5):
+    ///   v = r * sqrt( G * M / (r^2 + soft^2)^1.5 )
+    /// For softening = 0 the formula degenerates to v = sqrt(G*M/r) (prior contract — backward compatible).
+    /// Mismatch between seed velocity and kernel softening causes radial drift (TC-PH2-002 spec calibration).</summary>
+    public static unsafe void SeedOrbitalDisk(
+        NativeStore* store, int width, int height,
+        float innerRadius, float outerRadius, float centralMass,
+        float softening = PhysicsConstants.DefaultSoftening,
+        int seed = 1337)
+    {
+        if (store == null || store->BaseAddress == null)
+            throw new InvalidOperationException("Cannot seed a null or disposed NativeStore.");
+        if (innerRadius < 1f)
+            throw new ArgumentOutOfRangeException(nameof(innerRadius), "innerRadius must be >= 1f to avoid division by zero.");
+        if (softening < 0f)
+            throw new ArgumentOutOfRangeException(nameof(softening), "softening must be >= 0f.");
+
+        var rng = new Random(seed);
+        int count = store->Count;
+        float cx = width * 0.5f;
+        float cy = height * 0.5f;
+        float g = PhysicsConstants.G;
+        float softSq = softening * softening;
+
+        for (int i = 0; i < count; i++)
+        {
+            float r = innerRadius + (float)rng.NextDouble() * (outerRadius - innerRadius);
+            float theta = (float)rng.NextDouble() * MathF.PI * 2f;
+            store->X[i] = cx + r * MathF.Cos(theta);
+            store->Y[i] = cy + r * MathF.Sin(theta);
+            // v = r * sqrt( G * M / (r^2 + soft^2)^1.5 ) with (r^2 + soft^2)^1.5 = rSqSoft * sqrt(rSqSoft).
+            // When soft=0 this reduces to r * sqrt(G*M/r^3) = sqrt(G*M/r).
+            float rSqSoft = r * r + softSq;
+            float rSqSoftPow = rSqSoft * MathF.Sqrt(rSqSoft);
+            float v = r * MathF.Sqrt(g * centralMass / rSqSoftPow);
+            store->Vx[i] = -v * MathF.Sin(theta);
+            store->Vy[i] =  v * MathF.Cos(theta);
+        }
+
+        ClearForces(store);
     }
 
     /// <summary>Safe-facade for <see cref="Allocate"/>. Allows callers without <c>unsafe</c>

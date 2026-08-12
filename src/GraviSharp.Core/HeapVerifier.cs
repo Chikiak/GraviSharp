@@ -1,6 +1,6 @@
 using System;
 
-namespace GraviSharp.UI;
+namespace GraviSharp.Core;
 
 public static class HeapVerifier
 {
@@ -16,16 +16,26 @@ public static class HeapVerifier
         Enabled = true;
     }
 
+    /// <summary>
+    /// Resets MaxDelta to 0. Use between test cases to isolate HeapVerifier state
+    /// (the static fields accumulate across tests in the same process).
+    /// </summary>
+    public static void Reset()
+    {
+        MaxDelta = 0;
+        _prevAllocated = 0;
+    }
+
     public static void BeginFrame(int frameIndex)
     {
         if (!Enabled || frameIndex <= WarmupFrames) return;
-        _prevAllocated = GC.GetTotalAllocatedBytes();
+        _prevAllocated = GC.GetAllocatedBytesForCurrentThread();
     }
 
     public static void EndFrame(int frameIndex)
     {
         if (!Enabled || frameIndex <= WarmupFrames) return;
-        long curr = GC.GetTotalAllocatedBytes();
+        long curr = GC.GetAllocatedBytesForCurrentThread();
         long delta = curr - _prevAllocated;
         if (delta > MaxDelta)
         {
