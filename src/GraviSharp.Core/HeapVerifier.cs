@@ -29,13 +29,13 @@ public static class HeapVerifier
     public static void BeginFrame(int frameIndex)
     {
         if (!Enabled || frameIndex <= WarmupFrames) return;
-        _prevAllocated = GC.GetTotalAllocatedBytes();
+        _prevAllocated = GC.GetAllocatedBytesForCurrentThread();
     }
 
     public static void EndFrame(int frameIndex)
     {
         if (!Enabled || frameIndex <= WarmupFrames) return;
-        long curr = GC.GetTotalAllocatedBytes();
+        long curr = GC.GetAllocatedBytesForCurrentThread();
         long delta = curr - _prevAllocated;
         if (delta > MaxDelta)
         {
